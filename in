@@ -7,6 +7,11 @@ exec 3>&1
 exec 1>&2
 payload="$(cat <&0)"
 
+if [ "$(jq -r '.source.debug // "false"' <<< "$payload")" = "true" ]; then
+    jq -n "$payload"
+    set -x
+fi
+
 if [ "$(jq -r '.source | has("url")' <<< "$payload")" = 'true' ]; then
     url="$(jq -r .source.url <<< "$payload")"
 else
@@ -40,10 +45,10 @@ ENDLINE
 ENDLINE
 )
         dirty="false"
-        while read -r field value; do
+        while IFS=$: read -r field value; do
             [ "$dirty" = "true" ] && json+=","
             json+=$(cat <<ENDLINE
-    {"name": "$field", "value": "${value//\"/\\\"}"}
+    {"name": "$field", "value": "$(echo "$value" | sed 's,\",\\\",g' | sed 's/ //' | tr -d '\r' | tr '\t' ' ')"}
 ENDLINE
 )
             dirty="true"
@@ -62,5 +67,9 @@ ENDLINE
         json="{}"
         ;;
 esac
+
+if [ "$(jq -r '.source.debug // "false"' <<< "$payload")" = "true" ]; then
+    echo "$json"
+fi
 
 jq -n "$json" >&3
