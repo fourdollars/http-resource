@@ -1,0 +1,66 @@
+#!/bin/bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+exec 3>&1
+exec 1>&2
+payload="$(cat <&0)"
+
+if [ "$(jq -r '.source | has("url")' <<< "$payload")" = 'true' ]; then
+    url="$(jq -r .source.url <<< "$payload")"
+else
+    echo 'You need to provide the url.'
+    exit 1
+fi
+
+digest=$(jq -r '.source.digect // "etag"' <<< "$payload")
+download=$(jq -r '.params.download // "false"' <<< "$payload")
+
+case "$0" in
+    ('/opt/resource/check')
+        digest="sha256:$(curl -sSLI "$url" | grep -i ^"$digest" | sha256sum | awk '{print $1}')"
+        json=$(cat <<ENDLINE
+[
+  {
+    "digest": "${digest}"
+  }
+]
+ENDLINE
+)
+        ;;
+    ('/opt/resource/in')
+        digest="sha256:$(curl -sSLI "$url" | grep -i ^"$digest" | sha256sum | awk '{print $1}')"
+        json=$(cat <<ENDLINE
+{
+  "version": {
+    "digest": "${digest}"
+  },
+  "metadata": [
+ENDLINE
+)
+        dirty="false"
+        while read -r field value; do
+            [ "$dirty" = "true" ] && json+=","
+            json+=$(cat <<ENDLINE
+    {"name": "$field", "value": "${value//\"/\\\"}"}
+ENDLINE
+)
+            dirty="true"
+        done < <(curl -sSLI "$url" | tail -n +2 | head -n -1)
+        json+=$(cat <<ENDLINE
+  ]
+}
+ENDLINE
+)
+        if [ "$download" = "true" ]; then
+            cd "$1"
+            curl --progress-bar -SL "$url" > "$(basename "$url")"
+        fi
+        ;;
+    ('/opt/resource/out')
+        json="{}"
+        ;;
+esac
+
+jq -n "$json" >&3
