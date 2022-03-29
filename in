@@ -24,7 +24,11 @@ download=$(jq -r '.params.download // "false"' <<< "$payload")
 
 case "$0" in
     ('/opt/resource/check')
-        digest="sha256:$(curl -sSLI "$url" | grep -i ^"$digest" | sha256sum | awk '{print $1}')"
+        if curl -sSLI --fail "$url" | grep -q -i ^"$digest"; then
+            digest="sha256:$(curl -sSLI --fail "$url" | grep -i ^"$digest" | sha256sum | awk '{print $1}')"
+        else
+            digest="sha256:$(curl -sSL --fail "$url" | sha256sum | awk '{print $1}')"
+        fi
         json=$(cat <<ENDLINE
 [
   {
@@ -35,7 +39,11 @@ ENDLINE
 )
         ;;
     ('/opt/resource/in')
-        digest="sha256:$(curl -sSLI "$url" | grep -i ^"$digest" | sha256sum | awk '{print $1}')"
+        if curl -sSLI --fail "$url" | grep -q -i ^"$digest"; then
+            digest="sha256:$(curl -sSLI --fail "$url" | grep -i ^"$digest" | sha256sum | awk '{print $1}')"
+        else
+            digest="sha256:$(curl -sSL --fail "$url" | sha256sum | awk '{print $1}')"
+        fi
         json=$(cat <<ENDLINE
 {
   "version": {
@@ -52,7 +60,7 @@ ENDLINE
 ENDLINE
 )
             dirty="true"
-        done < <(curl -sSLI "$url" | tail -n +2 | head -n -1)
+        done < <(curl -sSLI --fail "$url" | tail -n +2 | head -n -1)
         json+=$(cat <<ENDLINE
   ]
 }
@@ -60,7 +68,7 @@ ENDLINE
 )
         if [ "$download" = "true" ]; then
             cd "$1"
-            curl --progress-bar -SL "$url" > "$(basename "$url")"
+            curl --progress-bar -SL --fail "$url" > "$(basename "$url")"
         fi
         ;;
     ('/opt/resource/out')

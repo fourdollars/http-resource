@@ -29,7 +29,7 @@ resource_types:
 ### Resource
 
 * url: **Required**
-* digest: Optional, check 'etag' in HTTP headers by default.
+* digest: Optional, check 'etag' in HTTP headers by default if HTTP headers contain it or it will download the content to generate the checksum.
 
 ```yaml
 resources:
@@ -40,6 +40,12 @@ resources:
   source:
     url: https://cdimage.ubuntu.com/daily-live/current/jammy-desktop-amd64.iso
     digest: etag
+- name: kernels
+  icon: penguin
+  type: http
+  check_every: 5m
+  source:
+    url: https://kernel.ubuntu.com/~kernel-ppa/mainline/
 ```
 
 #### get step params
@@ -75,4 +81,26 @@ jobs:
           apt-get update -q -q
           apt-get install --yes --no-install-recommends genisoimage
           isoinfo -d -i iso/jammy-desktop-amd64.iso
+- name: check-kernels
+  plan:
+  - get: kernels
+    params:
+      download: true
+    trigger: true
+  - task: check
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source:
+          repository: ubuntu
+          tag: latest
+      inputs:
+        - name: kernels
+      run:
+        path: sh
+        args:
+        - -exc
+        - |
+        grep -o 'href="v[^"]*"' kernels/mainline | grep -o '[0-9][^/]*' | sort -V
 ```
